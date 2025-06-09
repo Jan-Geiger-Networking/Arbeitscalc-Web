@@ -17,6 +17,10 @@
             <asp:Button ID="btnImportCSV" runat="server" Text="CSV laden" OnClick="btnImportCSV_Click" />
             <asp:Label ID="lblStatus" runat="server" ForeColor="Red" />
         </div>
+        <div style="background: #ffeaea; border: 2px solid #ff4444; color: #a00; font-weight: bold; border-radius: 6px; padding: 12px 18px; margin-bottom: 18px;">
+    ⚠️ <u>Achtung:</u> Zeiten dürfen <b>nur</b> im Format <b>HH:MM</b> eingegeben werden – z.&nbsp;B. <b>07:15</b>.<br />
+    <b>Niemals</b> einstellige Stunden schreiben (<b>falsch:</b> 7:15, <b>richtig:</b> 07:15)!
+</div>
         <h3>Tagesdaten</h3>
         <asp:GridView ID="GridViewTagesdaten" runat="server" AutoGenerateColumns="False"
               OnRowEditing="GridViewTagesdaten_RowEditing"

@@ -135,6 +135,7 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Datenschutz.aspx" />
+    <Content Include="favicon.ico" />
     <Content Include="images\jgn-logo.png" />
     <Content Include="images\tutorial1.png" />
     <Content Include="images\tutorial2.png" />
@@ -162,7 +163,6 @@
     <Content Include="Content\bootstrap.rtl.min.css" />
     <Content Include="Content\Site.css" />
     <Content Include="Default.aspx" />
-    <Content Include="favicon.ico" />
     <Content Include="Global.asax" />
     <Content Include="Logo-N-Cut.ico" />
     <Content Include="Scripts\bootstrap.bundle.js" />
