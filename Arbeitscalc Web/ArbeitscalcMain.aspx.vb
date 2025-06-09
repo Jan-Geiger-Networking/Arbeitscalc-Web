@@ -71,7 +71,7 @@ Partial Public Class ArbeitscalcMain
                 End While
             End Using
 
-            ' Hier werden alle Tagesblöcke wie in der Desktop-Logik gebaut
+            ' Tagesblöcke wie in der Desktop-App bauen
             Dim sortedEntries = entries.OrderBy(Function(x) x.Item1).ToList()
             Dim tagesdaten As New DataTable()
             tagesdaten.Columns.Add("Tag")
@@ -89,7 +89,6 @@ Partial Public Class ArbeitscalcMain
             tagesdaten.Columns.Add("Vergütete Arbeitszeit (h)")
             tagesdaten.Columns.Add("Datenintegrität")
 
-            ' Blöcke wie in der Desktop-App bauen:
             Dim blocks As New List(Of (Datum As Date, TagName As String, Baustelle As String, Bemerkung As String, Anfahrt As (Von As DateTime, Bis As DateTime)?, Arbeitszeit As (Von As DateTime, Bis As DateTime), Abfahrt As (Von As DateTime, Bis As DateTime)?))
             For i = 0 To sortedEntries.Count - 1
                 If sortedEntries(i).Item2 = "Arbeitsbeginn" Then
@@ -136,7 +135,6 @@ Partial Public Class ArbeitscalcMain
                 End If
             Next
 
-            ' Bemerkungen pro Tag sammeln
             Dim bemerkungenProTag As New Dictionary(Of Date, String)
             For Each entry In sortedEntries
                 If Not String.IsNullOrWhiteSpace(entry.Item4) Then
@@ -230,7 +228,6 @@ Partial Public Class ArbeitscalcMain
                 Next
             Next
 
-            ' Summen-Tabelle (Monat)
             Dim summenTabelle As New DataTable()
             summenTabelle.Columns.Add("Zeitraumtyp")
             summenTabelle.Columns.Add("Zeitraum")
@@ -326,6 +323,8 @@ Partial Public Class ArbeitscalcMain
         Response.End()
     End Sub
 
+
+
     Protected Sub btnExportCSV_Click(sender As Object, e As EventArgs)
         Dim tagesdaten As DataTable = TryCast(Session("Tagesdaten"), DataTable)
         Dim summenTabelle As DataTable = TryCast(Session("SummenTabelle"), DataTable)
@@ -376,6 +375,94 @@ Partial Public Class ArbeitscalcMain
         Response.Write(sb.ToString())
         Response.End()
     End Sub
+    Protected Sub GridViewTagesdaten_RowEditing(sender As Object, e As GridViewEditEventArgs)
+        GridViewTagesdaten.EditIndex = e.NewEditIndex
+        GridViewTagesdaten.DataSource = CType(Session("Tagesdaten"), DataTable)
+        GridViewTagesdaten.DataBind()
+    End Sub
+    Protected Sub GridViewTagesdaten_RowCancelingEdit(sender As Object, e As GridViewCancelEditEventArgs)
+        GridViewTagesdaten.EditIndex = -1
+        GridViewTagesdaten.DataSource = CType(Session("Tagesdaten"), DataTable)
+        GridViewTagesdaten.DataBind()
+    End Sub
+    Protected Sub GridViewTagesdaten_RowUpdating(sender As Object, e As GridViewUpdateEventArgs)
+        Dim dt As DataTable = CType(Session("Tagesdaten"), DataTable)
+        Dim row As GridViewRow = GridViewTagesdaten.Rows(e.RowIndex)
 
+        Dim datum As String = GridViewTagesdaten.DataKeys(e.RowIndex).Values("Datum").ToString()
+        Dim baustelle As String = GridViewTagesdaten.DataKeys(e.RowIndex).Values("Baustelle").ToString()
 
+        ' Indexe anpassen, falls du Spalten-Reihenfolge änderst!
+        Dim bemerkung As String = CType(row.Cells(3).Controls(0), TextBox).Text
+        Dim fahrzeitRaw As String = CType(row.Cells(4).Controls(0), TextBox).Text
+        Dim arbeitszeitRaw As String = CType(row.Cells(5).Controls(0), TextBox).Text
+        Dim pauseRaw As String = CType(row.Cells(6).Controls(0), TextBox).Text
+
+        For Each dr As DataRow In dt.Rows
+            If dr("Datum").ToString() = datum AndAlso dr("Baustelle").ToString() = baustelle Then
+                dr("Bemerkung") = bemerkung
+                dr("Fahrzeit-Zeitraum") = fahrzeitRaw
+                dr("Arbeitszeit-Zeitraum") = arbeitszeitRaw
+                dr("Pausenzeit (h)") = pauseRaw
+
+                ' Arbeitszeit neu berechnen
+                Try
+                    Dim zeiten = arbeitszeitRaw.Split("–"c)
+                    If zeiten.Length = 2 Then
+                        Dim von = DateTime.ParseExact(zeiten(0).Trim(), "HH:mm", CultureInfo.InvariantCulture)
+                        Dim bis = DateTime.ParseExact(zeiten(1).Trim(), "HH:mm", CultureInfo.InvariantCulture)
+                        Dim pause = Double.Parse(pauseRaw.Replace(",", "."), CultureInfo.InvariantCulture)
+                        Dim arbeitszeit = Math.Max(0, (bis - von).TotalMinutes / 60.0 - pause)
+                        dr("Arbeitszeit (h)") = arbeitszeit.ToString("0.00")
+
+                        ' Neuberechnung Überstunden, Überstd. 25/50%, Vergütete Arbeitszeit
+                        Dim soll As Double = 8.0 ' Oder je nach Tag dynamisch berechnen
+                        If datum.ToLower().Contains("freitag") Then soll = 6.0
+
+                        Dim uebersoll = Math.Max(0, arbeitszeit - soll)
+                        Dim ueb25 = Math.Min(2, uebersoll)
+                        Dim ueb50 = Math.Max(0, uebersoll - 2)
+                        Dim verg = Math.Min(arbeitszeit, soll) + ueb25 * 1.25 + ueb50 * 1.5
+
+                        dr("Überstunden (h)") = uebersoll.ToString("0.00")
+                        dr("Überstd. 25% (h)") = ueb25.ToString("0.00")
+                        dr("Überstd. 50% (h)") = ueb50.ToString("0.00")
+                        dr("Vergütete Arbeitszeit (h)") = verg.ToString("0.00")
+                    End If
+                Catch ex As Exception
+                    dr("Datenintegrität") = "FEHLER"
+                End Try
+
+                Exit For
+            End If
+        Next
+
+        Session("Tagesdaten") = dt
+        GridViewTagesdaten.EditIndex = -1
+        GridViewTagesdaten.DataSource = dt
+        GridViewTagesdaten.DataBind()
+
+        Call AktualisiereSummen(dt)
+    End Sub
+    Private Sub AktualisiereSummen(dt As DataTable)
+        Dim summenTabelle As New DataTable()
+        summenTabelle.Columns.Add("Zeitraumtyp")
+        summenTabelle.Columns.Add("Zeitraum")
+        summenTabelle.Columns.Add("Arbeitszeit (h)")
+        summenTabelle.Columns.Add("Fahrzeit (h)")
+        summenTabelle.Columns.Add("Überstunden (h)")
+
+        If dt.Rows.Count > 0 Then
+            Dim monat = DateTime.ParseExact(dt.Rows(0)("Datum").ToString(), "dd.MM.yyyy", CultureInfo.InvariantCulture).ToString("MMMM yyyy", New CultureInfo("de-DE"))
+            Dim arbeitszeitGes = dt.AsEnumerable().Sum(Function(r) Convert.ToDouble(r.Field(Of String)("Vergütete Arbeitszeit (h)")))
+            Dim fahrzeitGes = dt.AsEnumerable().Sum(Function(r) Convert.ToDouble(r.Field(Of String)("Fahrzeit (h)")))
+            Dim ueberstundenGes = dt.AsEnumerable().Sum(Function(r) Convert.ToDouble(r.Field(Of String)("Überstunden (h)")))
+            summenTabelle.Rows.Add("Monat", monat, arbeitszeitGes.ToString("0.00"), fahrzeitGes.ToString("0.00"), ueberstundenGes.ToString("0.00"))
+        End If
+
+        Session("SummenTabelle") = summenTabelle
+        GridViewSummen.DataSource = summenTabelle
+        GridViewSummen.DataBind()
+        lblStatus.Text = "Summen aktualisiert: " & Now.ToString("T:HH:mm:ss")
+    End Sub
 End Class

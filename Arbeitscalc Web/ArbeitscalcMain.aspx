@@ -18,7 +18,29 @@
             <asp:Label ID="lblStatus" runat="server" ForeColor="Red" />
         </div>
         <h3>Tagesdaten</h3>
-        <asp:GridView ID="GridViewTagesdaten" runat="server" AutoGenerateColumns="True" CssClass="table" />
+        <asp:GridView ID="GridViewTagesdaten" runat="server" AutoGenerateColumns="False"
+              OnRowEditing="GridViewTagesdaten_RowEditing"
+              OnRowUpdating="GridViewTagesdaten_RowUpdating"
+              OnRowCancelingEdit="GridViewTagesdaten_RowCancelingEdit"
+              DataKeyNames="Datum,Baustelle">
+    <Columns>
+        <asp:BoundField DataField="Tag" HeaderText="Tag" ReadOnly="True" />
+        <asp:BoundField DataField="Datum" HeaderText="Datum" ReadOnly="True" />
+        <asp:BoundField DataField="Baustelle" HeaderText="Baustelle" ReadOnly="True" />
+        <asp:BoundField DataField="Bemerkung" HeaderText="Bemerkung" />
+        <asp:BoundField DataField="Fahrzeit-Zeitraum" HeaderText="Fahrzeit-Zeitraum" />
+        <asp:BoundField DataField="Arbeitszeit-Zeitraum" HeaderText="Arbeitszeit-Zeitraum" />
+        <asp:BoundField DataField="Pausenzeit (h)" HeaderText="Pausenzeit (h)" />
+        <asp:BoundField DataField="Arbeitszeit (h)" HeaderText="Arbeitszeit (h)" ReadOnly="True" />
+        <asp:BoundField DataField="Fahrzeit (h)" HeaderText="Fahrzeit (h)" ReadOnly="True" />
+        <asp:BoundField DataField="Überstunden (h)" HeaderText="Überstunden (h)" ReadOnly="True" />
+        <asp:BoundField DataField="Überstd. 25% (h)" HeaderText="Überstd. 25% (h)" ReadOnly="True" />
+        <asp:BoundField DataField="Überstd. 50% (h)" HeaderText="Überstd. 50% (h)" ReadOnly="True" />
+        <asp:BoundField DataField="Vergütete Arbeitszeit (h)" HeaderText="Vergütete Arbeitszeit (h)" ReadOnly="True" />
+        <asp:BoundField DataField="Datenintegrität" HeaderText="Datenintegrität" ReadOnly="True" />
+        <asp:CommandField ShowEditButton="True" />
+    </Columns>
+</asp:GridView>
         <h3>Summen</h3>
         <asp:GridView ID="GridViewSummen" runat="server" AutoGenerateColumns="True" CssClass="table" />
         <asp:Button ID="btnExportPdf" runat="server" Text="Export PDF" OnClick="btnExportPdf_Click" />
