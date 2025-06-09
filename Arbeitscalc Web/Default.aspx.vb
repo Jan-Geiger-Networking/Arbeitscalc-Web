@@ -18,5 +18,8 @@
     Protected Sub btnHinweise_Click(sender As Object, e As EventArgs) Handles btnHinweise.Click
         Response.Redirect("Buchungshinweise.aspx")
     End Sub
+    Protected Sub btnDatenschutz_Click(sender As Object, e As EventArgs) Handles btnDatenschutz.Click
+        Response.Redirect("Datenschutz.aspx")
+    End Sub
 
 End Class
