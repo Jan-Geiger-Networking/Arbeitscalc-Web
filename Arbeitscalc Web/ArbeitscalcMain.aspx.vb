@@ -16,7 +16,8 @@ Partial Public Class ArbeitscalcMain
                 Exit Sub
             End If
 
-            Dim entries As New List(Of Tuple(Of DateTime, String, String, String))()
+            ' Jetzt mit 5 Feldern: datum, typ, baustelle, bemerkung, meldungstext
+            Dim entries As New List(Of Tuple(Of DateTime, String, String, String, String))()
             Dim lastBemerkung As String = ""
             Using reader As New IO.StreamReader(FileUpload1.PostedFile.InputStream, System.Text.Encoding.UTF8)
                 Dim headerRead As Boolean = False
@@ -48,7 +49,7 @@ Partial Public Class ArbeitscalcMain
                             Dim typ As String = ""
                             If buchungstyp = "fahrt" And meldungstext = "anfahrt" Then
                                 typ = "Anfahrt"
-                            ElseIf buchungstyp = "beginn" And meldungstext = "arbeitsbeginn" Then
+                            ElseIf buchungstyp = "beginn" And meldungstext.StartsWith("arbeitsbeginn") Then
                                 typ = "Arbeitsbeginn"
                             ElseIf buchungstyp = "fahrt" And meldungstext = "abfahrt" Then
                                 typ = "Abfahrt"
@@ -60,7 +61,7 @@ Partial Public Class ArbeitscalcMain
                                     bemerkung = lastBemerkung
                                     lastBemerkung = ""
                                 End If
-                                entries.Add(Tuple.Create(datum, typ, baustelle, bemerkung))
+                                entries.Add(Tuple.Create(datum, typ, baustelle, bemerkung, meldungstext))
                             End If
                         Catch ex As Exception
                             ' Fehler ignorieren
@@ -89,11 +90,14 @@ Partial Public Class ArbeitscalcMain
             tagesdaten.Columns.Add("Vergütete Arbeitszeit (h)")
             tagesdaten.Columns.Add("Datenintegrität")
 
-            Dim blocks As New List(Of (Datum As Date, TagName As String, Baustelle As String, Bemerkung As String, Anfahrt As (Von As DateTime, Bis As DateTime)?, Arbeitszeit As (Von As DateTime, Bis As DateTime), Abfahrt As (Von As DateTime, Bis As DateTime)?))
+            ' Block jetzt mit Meldungstext!
+            Dim blocks As New List(Of (Datum As Date, TagName As String, Baustelle As String, Bemerkung As String, Meldungstext As String, Anfahrt As (Von As DateTime, Bis As DateTime)?, Arbeitszeit As (Von As DateTime, Bis As DateTime), Abfahrt As (Von As DateTime, Bis As DateTime)?))
+
             For i = 0 To sortedEntries.Count - 1
                 If sortedEntries(i).Item2 = "Arbeitsbeginn" Then
                     Dim baustelle = sortedEntries(i).Item3
                     Dim bemerkung = sortedEntries(i).Item4
+                    Dim meldungstext = sortedEntries(i).Item5
                     Dim datum = sortedEntries(i).Item1.Date
                     Dim arbeitsStart = sortedEntries(i).Item1
 
@@ -131,7 +135,16 @@ Partial Public Class ArbeitscalcMain
                         j += 1
                     End While
 
-                    blocks.Add((datum, datum.ToString("dddd", New Globalization.CultureInfo("de-DE")), baustelle, bemerkung, anfahrt, (arbeitsStart, arbeitsEnde), abfahrt))
+                    blocks.Add((
+                    datum,
+                    datum.ToString("dddd", New Globalization.CultureInfo("de-DE")),
+                    baustelle,
+                    bemerkung,
+                    meldungstext,
+                    anfahrt,
+                    (arbeitsStart, arbeitsEnde),
+                    abfahrt
+                ))
                 End If
             Next
 
@@ -209,6 +222,11 @@ Partial Public Class ArbeitscalcMain
                         fahrzeitStr &= $"{b.Abfahrt.Value.Von:HH:mm}–{b.Abfahrt.Value.Bis:HH:mm}"
                     End If
 
+                    Dim datenintegritaet As String = "OK"
+                    If b.Meldungstext.ToLower().Contains("übernachtung") Then
+                        datenintegritaet = "FEHLER: Arbeitsbeginn mit Zusatz erkannt (" & b.Meldungstext & ")"
+                    End If
+
                     tagesdaten.Rows.Add(
                     tagName,
                     datum.ToString("dd.MM.yyyy"),
@@ -223,7 +241,7 @@ Partial Public Class ArbeitscalcMain
                     u25.ToString("0.00"),
                     u50.ToString("0.00"),
                     verg.ToString("0.00"),
-                    "OK"
+                    datenintegritaet
                 )
                 Next
             Next
@@ -256,6 +274,7 @@ Partial Public Class ArbeitscalcMain
             lblStatus.Text = "Fehler: " & ex.Message
         End Try
     End Sub
+
 
 
     Protected Sub btnExportPDF_Click(sender As Object, e As EventArgs)
@@ -433,6 +452,26 @@ Partial Public Class ArbeitscalcMain
                     dr("Datenintegrität") = "FEHLER"
                 End Try
 
+                ' Fahrzeit neu berechnen
+                Try
+                    ' Versuche, die Fahrzeiten aus dem Feld zu extrahieren und zu berechnen
+                    Dim fahrzeiten = fahrzeitRaw.Split(","c)
+                    Dim fahrzeitGesamt As Double = 0
+                    For Each fz In fahrzeiten
+                        Dim zeiten = fz.Trim().Split("–"c)
+                        If zeiten.Length = 2 Then
+                            Dim von = DateTime.ParseExact(zeiten(0).Trim(), "HH:mm", CultureInfo.InvariantCulture)
+                            Dim bis = DateTime.ParseExact(zeiten(1).Trim(), "HH:mm", CultureInfo.InvariantCulture)
+                            Dim dauer = (bis - von).TotalMinutes / 60.0
+                            If dauer < 0 Then dauer += 24 ' Nachtüberschreitung
+                            fahrzeitGesamt += dauer
+                        End If
+                    Next
+                    dr("Fahrzeit (h)") = fahrzeitGesamt.ToString("0.00")
+                Catch ex As Exception
+                    dr("Datenintegrität") = "FEHLER"
+                End Try
+
                 Exit For
             End If
         Next
@@ -464,5 +503,13 @@ Partial Public Class ArbeitscalcMain
         GridViewSummen.DataSource = summenTabelle
         GridViewSummen.DataBind()
         lblStatus.Text = "Summen aktualisiert: " & Now.ToString("T:HH:mm:ss")
+    End Sub
+    Protected Sub GridViewTagesdaten_RowDataBound(sender As Object, e As GridViewRowEventArgs)
+        If e.Row.RowType = DataControlRowType.DataRow Then
+            Dim fehler As String = e.Row.Cells(13).Text ' Index je nach Spaltenanordnung!
+            If Not String.IsNullOrWhiteSpace(fehler) AndAlso fehler.ToUpper().Contains("FEHLER") Then
+                e.Row.BackColor = Drawing.Color.LightCoral
+            End If
+        End If
     End Sub
 End Class
